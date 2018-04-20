@@ -1,7 +1,8 @@
 # Customize
 
-CFLAGS = -march=armv7-m -mthumb -mtune=cortex-m3
+FLASH_ADDR = 0x08000000
 LD_SCRIPT = stm32f103x8.ld
+CFLAGS = -march=armv7-m -mthumb -mtune=cortex-m3
 
 # Common
 
@@ -11,7 +12,7 @@ LD := $(CROSS_COMPILE)-ld
 OC := $(CROSS_COMPILE)-objcopy
 OD := $(CROSS_COMPILE)-objdump
 
-CFLAGS += -fno-builtin -nostdlib -nostartfiles
+CFLAGS += -nostartfiles
 CFLAGS += -Wall -Wunused-parameter -Werror -Wno-main #-Wpointer-arith
 CFLAGS += -O2
 
@@ -20,6 +21,7 @@ SRCS    = $(wildcard *.c)
 OBJS	= $(SRCS:.c=.o)
 
 LDFLAGS = -T$(LD_SCRIPT)
+#LDFLAGS += -L$(HOME)/Toolchain/gcc-arm-none-eabi-7-2017-q4-major/arm-none-eabi/lib -lc
 ODFLAGS = -Dsx
 
 all: $(TARGET).bin $(TARGET).dump
@@ -32,13 +34,14 @@ $(TARGET).dump: $(TARGET).elf
 $(TARGET).bin: $(TARGET).elf
 	$(OC) $(OCFLAGS) -O binary $< $@
 $(TARGET).elf : $(OBJS)
-	$(LD) -o $@ $^ -Map $(TARGET).map $(LDFLAGS)
+	#$(LD) -o $@ $^ -Map $(TARGET).map $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ -Wl,-Map,$(TARGET).map $(LDFLAGS)
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
 clean:
 	rm -f *.o $(TARGET).bin $(TARGET).dump $(TARGET).elf $(TARGET).map
-.PHONY: flash
-flash:
-	st-flash --reset write $(TARGET).bin 0x08000000
+.PHONY: flash burn
+flash burn:
+	st-flash --reset write $(TARGET).bin $(FLASH_ADDR)
