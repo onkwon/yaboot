@@ -1,0 +1,47 @@
+## Structure
+
+            /============\
+sector 0    |            |
+       .    | Bootloader |
+       .    |            |
+       .    |------------|
+       m    |  BootOpt   |
+sector m+1  |------------|
+       .    |            |
+       .    |  OS(App)   |
+       .    |            |
+       n    |            |
+sector n+1  |------------|
+       .    |            |
+       .    | New image  |
+       .    |            |
+            |------------|
+
+## BootOpt
+
+ 0x00 | Latest working address | 0xffffffff if none, new image must exist in this case
+ 0x04 | New image address      | 0xffffffff if none or after finishing update
+ 0x08 | New image length       | 0xffffffff if none or after finishing update
+ 0x0C | New image hash         |
+ 0x10 | Reserved for AES and RSA keys
+
+## How it works
+
+1. Download new image into flash, at the sector n+1.
+2. Check hash
+3. if not matches go to 1
+4. Update BootOpt -- it must be here guaranteed that flashed new image is correct one
+  4-1. Latest working address to 0xffffffff
+  4-2. New image adddress to new image addrss
+  4-3. New image length to new image length
+  4-4. New image hash
+  4-5. Verify all the information above after flashing
+5. Reboot
+6. Then bootloader starts to write new image into OS area
+7. if fail goto 5
+8. Check hash if correct
+9. if fail goto 5
+10. Update BootOpt
+  10-1. Latest working address to OS
+11. Reboot
+  11-1. It now boot up the new OS(app) checking out the latest working address.
