@@ -4,7 +4,7 @@ MEMORY
 	rom (rx)	: ORIGIN = 0x08000000, LENGTH = 128K
 }
 
-PROVIDE(_bootopt = 0x1000); /* 4096 */
-PROVIDE(_app = 0x1400); /* 4096 + 1024(sector size) */
+PROVIDE(_bootopt = 0xC00); /* 1024(sector size) * 3 */
+PROVIDE(_app = 0x1000); /* 4096 */
 
 INCLUDE common.ld

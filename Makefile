@@ -1,7 +1,8 @@
 # Customize
 
 FLASH_ADDR = 0x08000000
-LD_SCRIPT = stm32f103x8.ld
+LD_SCRIPT = bsp/stm32f103x8.ld
+MACH = stm32f1
 CFLAGS = -march=armv7-m -mthumb -mtune=cortex-m3
 
 # Common
@@ -15,10 +16,12 @@ OD := $(CROSS_COMPILE)-objdump
 CFLAGS += -nostartfiles
 CFLAGS += -Wall -Wunused-parameter -Werror -Wno-main #-Wpointer-arith
 CFLAGS += -O2
+CFLAGS += -D$(MACH)
 
 TARGET	= yaboot
 SRCS    = $(wildcard *.c)
 OBJS	= $(SRCS:.c=.o)
+INCS	= -I./bsp
 
 LDFLAGS = -T$(LD_SCRIPT)
 #LDFLAGS += -L$(HOME)/Toolchain/gcc-arm-none-eabi-7-2017-q4-major/arm-none-eabi/lib -lc
@@ -35,9 +38,9 @@ $(TARGET).bin: $(TARGET).elf
 	$(OC) $(OCFLAGS) -O binary $< $@
 $(TARGET).elf : $(OBJS)
 	#$(LD) -o $@ $^ -Map $(TARGET).map $(LDFLAGS)
-	$(CC) $(CFLAGS) -o $@ $^ -Wl,-Map,$(TARGET).map $(LDFLAGS)
+	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -Wl,-Map,$(TARGET).map $(LDFLAGS)
 .c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCS) -c $< -o $@
 
 .PHONY: clean
 clean:

@@ -23,12 +23,6 @@ SECTIONS
 		*(.rodata)
 		*(.rodata.*)
 
-		. = _bootopt;
-		LONG(_rom_start + _app); /* latest working address */
-		LONG(0xffffffff); /* new image address */
-		LONG(0xffffffff); /* new image length */
-		LONG(0xffffffff); /* new image hash */
-
 		_etext = .;
 	} > rom
 
@@ -55,4 +49,11 @@ SECTIONS
 		. = ALIGN(4);
 		_ebss = .;
 	} > ram AT > rom
+
+	.bootopt _rom_start + _bootopt :
+	{
+		LONG(_rom_start + _app); /* ADDR */
+		LONG(0xffffffff); /* LEN */
+		LONG(0xffffffff); /* HASH */
+	} > rom
 }

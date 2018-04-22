@@ -1,47 +1,76 @@
-## Structure
+## Memory map
 
-            /============\
-sector 0    |            |
-       .    | Bootloader |
-       .    |            |
-       .    |------------|
-       m    |  BootOpt   |
-sector m+1  |------------|
-       .    |            |
-       .    |  OS(App)   |
-       .    |            |
-       n    |            |
-sector n+1  |------------|
-       .    |            |
-       .    | New image  |
-       .    |            |
-            |------------|
+	            /============\
+	sector 0    | Bootloader |
+	       .    |    --------|
+	       .    |   | AES &  |
+	       .    |   | RSA key|
+	       .    |------------|
+	       m    |  BootOpt   |
+	sector m+1  |------------|
+	       .    |  OS(APP)   |
+	       .    |    --------|
+	       .    |   | OMAGIC |            --------
+	       .    |   | LEN    |  / 0x0000 | MAGIC1 | 0xDEADC0DE
+	       n    |   | HASH   | /         |--------|
+	sector n+1  |------------|/   0x0004 | MAGIC2 | 0x45670123
+	       .    |            |           |--------|
+	       .    | New image  |    0x0008 | MAGIC3 | 0xCDEF89AB
+	       .    |            |           |--------|
+	            |------------|\   0x000C | Length | of data
+		                   \         |--------|
+				    \ 0x0010 |  Hash  | RSApriv(HASH(Data))
+				             |--------|
+				      0x0110 |  Data  |
+				              --------
 
-## BootOpt
+	         OMAGIC
+	        ---------
+	0x0000 | OMAGIC1 | 0xFFFFFFED
+	       |---------|
+	0x0004 | OMAGIC2 | 0xCBA98765
+	       |---------|
+	0x0008 | OMAGIC3 | 0x43210FFF
+	        ---------
 
- 0x00 | Latest working address | 0xffffffff if none, new image must exist in this case
- 0x04 | New image address      | 0xffffffff if none or after finishing update
- 0x08 | New image length       | 0xffffffff if none or after finishing update
- 0x0C | New image hash         |
- 0x10 | Reserved for AES and RSA keys
+## BootOpt (1 sector)
+
+ 0x0000 | ADDR
+ 0x0004 | LEN
+ 0x0008 | HASH
+
+* HASH is authenticated by RSA private key. So decrypt it first using the public key before comparing
 
 ## How it works
 
-1. Download new image into flash, at the sector n+1.
-2. Check hash
-3. if not matches go to 1
-4. Update BootOpt -- it must be here guaranteed that flashed new image is correct one
-  4-1. Latest working address to 0xffffffff
-  4-2. New image adddress to new image addrss
-  4-3. New image length to new image length
-  4-4. New image hash
-  4-5. Verify all the information above after flashing
-5. Reboot
-6. Then bootloader starts to write new image into OS area
-7. if fail goto 5
-8. Check hash if correct
-9. if fail goto 5
-10. Update BootOpt
-  10-1. Latest working address to OS
-11. Reboot
-  11-1. It now boot up the new OS(app) checking out the latest working address.
+A1. If ADDR[0:2] matches to MAGIC1:3, go to B1
+  A1-1. Before load ADDR[0:2] check flash boundary of ADDR
+A2. Else compare HASH to check if APP is modified (optional)
+  A2-1. If no ADDR|HASH|LEN or not match, retrieve it again from APP
+  A2-2. APP must be verified after retrieving again
+  A2-3. If ADDR is not the same to APP address, go with APP address
+A3. Run the APP
+
+B1. Go to C8
+
+C1. Download new image into flash, at the sector n+1
+C2. Check hash
+C3. If not matches, go to C1
+C4. Verify the flashed new image
+  C4-1. If fail, go to C1
+C5. Erase BootOpt
+  C5-1. If reset occurs here, A2-1 will take place meaning you need to start again from C1
+C6. Update ADDR to the new image start address, LEN, and HASH
+  C6-1. Verify all the meta data above after flashing
+C7. Reboot(optional)
+  C7-1. A1 and B1 will take place
+C8. Verify BootOpt comparing to new image meta data
+  C8-1. If fail, go to C4
+C9. Erase APP
+C10. Write new image to APP
+  C10-1. Verify
+C11. Erase BootOpt
+  C11-1. same to C5-1
+C12. Upate ADDR, LEN, and HASH
+  C12-1. Verify
+C13. Reboot

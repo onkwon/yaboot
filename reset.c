@@ -20,12 +20,18 @@
  *  Welcome aboard!
  */
 
-#include "main.h"
-#include "regs.h"
+#include "bsp.h"
+#include "flash.h"
 
 extern char _ram_end;
 
-static void ISR_reset();
+void reboot()
+{
+#define VECTKEY		0x5fa
+	SCB_AIRCR = (VECTKEY << 16)
+		| (SCB_AIRCR & (7 << 8)) /* keep priority group unchanged */
+		| (1 << 2); /* system reset request */
+}
 
 static void ISR_null()
 {
@@ -53,8 +59,8 @@ static void __attribute__((naked, used)) ISR_reset()
 {
 	cli();
 
-	SCB_CCR   |= 0x00000008; /* enable unaligned access traps */
-	SCB_CCR   |= 0x00000200; /* 8-byte stack alignment */
+	SCB_CCR |= 0x00000008; /* enable unaligned access traps */
+	SCB_CCR |= 0x00000200; /* 8-byte stack alignment */
 
 	dsb();
 	isb();
@@ -66,19 +72,19 @@ static void __attribute__((naked, used)) ISR_reset()
 	unsigned int *p = (unsigned int *)
 		((unsigned int)&_app + (unsigned int)&_rom_start);
 	void (*run_app)() = (void (*)())p[1];
-	// set stack first
+
+#if 0
+	flash_program((void * const)0x08018000, (const void * const)p, 1024);
+
+if (*(unsigned int *)0x08018000 == 0xffffffff)
+	reboot();
+#endif
+
+	setsp(p[0]);
 	run_app();
 #else
 	while (1);
 #endif
-}
-
-void __reboot()
-{
-#define VECTKEY		0x5fa
-	SCB_AIRCR = (VECTKEY << 16)
-		| (SCB_AIRCR & (7 << 8)) /* keep priority group unchanged */
-		| (1 << 2); /* system reset request */
 }
 
 static void *vectors[]
