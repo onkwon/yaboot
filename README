@@ -17,11 +17,13 @@
 	       .    |            |           |--------|
 	       .    | New image  |    0x0008 | MAGIC3 | 0xCDEF89AB
 	       .    |            |           |--------|
-	            |------------|\   0x000C | Length | of data
+	            |------------|\   0x000C |   IV   | AES Initial Vector
 		                   \         |--------|
-				    \ 0x0010 |  Hash  | RSApriv(HASH(Data))
+				    \ 0x001C | Length | of E(Data)
 				             |--------|
-				      0x0110 |  Data  |
+				      0x0020 |  Hash  | RSApriv(HASH(Data))
+				             |--------|
+				      0x0120 | E(Data)|
 				              --------
 
 	         OMAGIC
@@ -37,7 +39,7 @@
 
  0x0000 | ADDR
  0x0004 | LEN
- 0x0008 | HASH
+ 0x0008 | HASH (32 bytes)
 
 * HASH is authenticated by RSA private key. So decrypt it first using the public key before comparing
 
