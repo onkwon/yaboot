@@ -1,7 +1,7 @@
 # Customize
 
 FLASH_ADDR = 0x08000000
-LD_SCRIPT = bsp/stm32f103x8.ld
+LD_SCRIPT = bsp/stm32f103xE.ld
 MACH = stm32f1
 CFLAGS = -march=armv7-m -mthumb -mtune=cortex-m3
 
@@ -19,9 +19,10 @@ CFLAGS += -O2
 CFLAGS += -D$(MACH)
 
 TARGET	= yaboot
-SRCS    = $(wildcard *.c)
+SRCS    = $(wildcard *.c) tools/sha256.c tools/tiny-AES-c/aes.c
 OBJS	= $(SRCS:.c=.o)
-INCS	= -I./bsp
+INCS	= -Ibsp -Itools -Itools/tiny-AES-c
+CFLAGS += -DCTR=1 #-DCBC=1
 
 LDFLAGS = -T$(LD_SCRIPT)
 #LDFLAGS += -L$(HOME)/Toolchain/gcc-arm-none-eabi-7-2017-q4-major/arm-none-eabi/lib -lc
@@ -44,7 +45,7 @@ $(TARGET).elf : $(OBJS)
 
 .PHONY: clean
 clean:
-	rm -f *.o $(TARGET).bin $(TARGET).dump $(TARGET).elf $(TARGET).map
+	rm -f *.o $(TARGET).bin $(TARGET).dump $(TARGET).elf $(TARGET).map $(OBJS)
 .PHONY: flash burn
 flash burn:
 	st-flash --reset write $(TARGET).bin $(FLASH_ADDR)

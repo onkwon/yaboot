@@ -4,10 +4,10 @@
 	sector 0    | Bootloader |
 	       .    |    --------|
 	       .    |   | AES &  |
-	       .    |   | RSA key|
-	       .    |------------|
-	       m    |  BootOpt   |
-	sector m+1  |------------|
+	       .    |   | RSA key|  Data
+	       .    |------------|  /
+	       m    |  BootOpt   | /
+	sector m+1  |------------|/
 	       .    |  OS(APP)   |
 	       .    |    --------|
 	       .    |   | OMAGIC |            --------
@@ -17,13 +17,13 @@
 	       .    |            |           |--------|
 	       .    | New image  |    0x0008 | MAGIC3 | 0xCDEF89AB
 	       .    |            |           |--------|
-	            |------------|\   0x000C |   IV   | AES Initial Vector
+	            |------------|\   0x000C | Length | of E(Data)
 		                   \         |--------|
-				    \ 0x001C | Length | of E(Data)
+				    \ 0x0010 |   IV   | AES Initial Vector
 				             |--------|
-				      0x0020 |  Hash  | RSApriv(HASH(Data))
+				      0x0020 |  Hash  | RSApriv(HASH(E(Data)))
 				             |--------|
-				      0x0120 | E(Data)|
+				      0x0040 | E(Data)|
 				              --------
 
 	         OMAGIC
@@ -76,3 +76,7 @@ C11. Erase BootOpt
 C12. Upate ADDR, LEN, and HASH
   C12-1. Verify
 C13. Reboot
+
+## TODO
+
+* Add a functionality to update booloader itself

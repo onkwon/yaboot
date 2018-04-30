@@ -35,4 +35,14 @@
 #error undefined machine
 #endif
 
+#define RCC_BASE		(0x40021000)
+#define RCC_APB2ENR		(*(volatile unsigned int *)(RCC_BASE + 0x18))
+
+#define GPIOA_CRH		(*(volatile unsigned int *)0x40010804)
+
+#define USART1_SR		(*(volatile unsigned int *)0x40013800)
+#define USART1_DR		(*(volatile unsigned int *)0x40013804)
+#define USART1_BRR		(*(volatile unsigned int *)0x40013808)
+#define USART1_CR1		(*(volatile unsigned int *)0x4001380c)
+
 #endif /* __REGS_H__ */

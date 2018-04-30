@@ -8,6 +8,9 @@ PROVIDE(_ram_size    = LENGTH(ram));
 PROVIDE(_ram_end     = ORIGIN(ram) + LENGTH(ram));
 PROVIDE(_vector_size = 0x200); /* The minimum alignment is 128 words. */
 
+PROVIDE(_bootopt = _rom_start + _bootopt_offset);
+PROVIDE(_app = _rom_start + _app_offset);
+
 SECTIONS
 {
 	.text :
@@ -50,9 +53,18 @@ SECTIONS
 		_ebss = .;
 	} > ram AT > rom
 
-	.bootopt _rom_start + _bootopt :
+	.aes128 _rom_start + _bootopt_offset - 16 :
 	{
-		LONG(_rom_start + _app); /* ADDR */
+		_aes_key = .;
+		LONG(0x933ADA7F);
+		LONG(0x485F0153);
+		LONG(0x874F637C);
+		LONG(0x520202A2);
+	} > rom
+
+	.bootopt _rom_start + _bootopt_offset :
+	{
+		LONG(_rom_start + _app_offset); /* ADDR */
 		LONG(0xffffffff); /* LEN */
 		LONG(0xffffffff); /* HASH */
 	} > rom

@@ -25,14 +25,6 @@
 
 extern char _ram_end;
 
-void reboot()
-{
-#define VECTKEY		0x5fa
-	SCB_AIRCR = (VECTKEY << 16)
-		| (SCB_AIRCR & (7 << 8)) /* keep priority group unchanged */
-		| (1 << 2); /* system reset request */
-}
-
 static void ISR_null()
 {
 }
@@ -67,24 +59,8 @@ static void __attribute__((naked, used)) ISR_reset()
 
 	mem_init();
 
-#if 1
-	extern char _app, _rom_start;
-	unsigned int *p = (unsigned int *)
-		((unsigned int)&_app + (unsigned int)&_rom_start);
-	void (*run_app)() = (void (*)())p[1];
-
-#if 0
-	flash_program((void * const)0x08018000, (const void * const)p, 1024);
-
-if (*(unsigned int *)0x08018000 == 0xffffffff)
-	reboot();
-#endif
-
-	setsp(p[0]);
-	run_app();
-#else
-	while (1);
-#endif
+	extern void main();
+	main();
 }
 
 static void *vectors[]
