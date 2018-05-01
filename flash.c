@@ -273,10 +273,10 @@ retry:
 				src = (unsigned int *)(tmp + (ss - abs(t)));
 				left += abs(t) / 4;
 			}
-
-			flash_prepare();
 		} else
 			clear_flags();
+
+		flash_prepare();
 
 		if (flash_erase(s))
 			goto cleanout;
