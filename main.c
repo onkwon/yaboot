@@ -11,7 +11,8 @@
 #define MAGIC2		0x23016745
 #define MAGIC3		0xAB89EFCD
 
-#define BUFSIZE		1024
+#define warn(msg)	uart_puts("WARN: "msg"\r\n")
+#define notice(msg)	uart_puts(msg"\r\n")
 
 struct appimg_t {
 	const uint32_t magic[3];
@@ -21,8 +22,17 @@ struct appimg_t {
 	const uint8_t data[];
 } __attribute__((packed, aligned(4)));
 
+struct bootopt_t {
+	const uint32_t addr;
+	const uint32_t len;
+	const uint8_t hash[32];
+} __attribute__((packed, aligned(4)));
+
 void reboot()
 {
+	dsb();
+	isb();
+
 #define VECTKEY		0x5fa
 	SCB_AIRCR = (VECTKEY << 16)
 		| (SCB_AIRCR & (7 << 8)) /* keep priority group unchanged */
@@ -58,101 +68,127 @@ static int verify_hash(const uint8_t *hash, const uint8_t *data, size_t len)
 	return memcmp(hash, result, 32);
 }
 
-static void program()
+static void program(void *addr, const struct appimg_t *img)
 {
-	extern char _aes_key;
+	extern char _aes_key, _sector_size;
 	struct AES_ctx ctx;
+	uint8_t buf[(int)&_sector_size];
+	int size;
+	uint8_t *d = (uint8_t *)addr;
 	const uint8_t *key = (const uint8_t *)&_aes_key;
-	struct appimg_t *img = (struct appimg_t *)0x08020000;
-	uint8_t buf[BUFSIZE];
-
-	verify_hash(img->hash, img->data, img->len);
 
 	AES_init_ctx_iv(&ctx, key, img->iv);
 
-	memcpy(buf, img->data, BUFSIZE);
-	AES_CTR_xcrypt_buffer(&ctx, buf, BUFSIZE);
-
-#if 0
-	char t[10];
-
-uart_puts("-----------------------");
-uart_put('\r');
-uart_put('\n');
-	for (int i = 0; i < BUFSIZE; i++) {
-		if (!(i % 16)) {
-			uart_put('\r');
-			uart_put('\n');
-		}
-
-		itoa(buf[i], t, 16);
-		for (int j = 0; t[j]; j++)
-			uart_put(t[j]);
-		uart_put(' ');
-	}
-	///////////////////
-	memcpy(buf, &img->data[BUFSIZE], BUFSIZE);
-	AES_CTR_xcrypt_buffer(&ctx, buf, BUFSIZE);
-uart_put('\r');
-uart_put('\n');
-	for (int i = 0; i < BUFSIZE; i++) {
-		if (!(i % 16)) {
-			uart_put('\r');
-			uart_put('\n');
-		}
-
-		itoa(buf[i], t, 16);
-		for (int j = 0; t[j]; j++)
-			uart_put(t[j]);
-		uart_put(' ');
-	}
+	for (int i = 0; i < img->len; i += (int)&_sector_size) {
+		size = ((img->len - i) < (int)&_sector_size)?
+			img->len - i : (int)&_sector_size;
+		memcpy(buf, &img->data[i], size);
+		AES_CTR_xcrypt_buffer(&ctx, buf, size);
+		flash_program(d, (const void * const)buf, size);
+		d += size;
+#ifdef DEBUG
+		char t[10];
+		itoa((i+size) * 100 / img->len, t, 10);
+		uart_put('\r');
+		uart_puts("Flashing : ");
+		uart_puts(t);
+		uart_put('%');
 #endif
+	}
+#ifdef DEBUG
+	uart_puts("\r\n");
+	char t[10];
+	itoa((int)addr, t, 16);
+	uart_puts("written at 0x");
+	uart_puts(t);
+	uart_puts("\r\n");
+#endif
+}
+
+static void update_bootopt(void *addr, const struct appimg_t *img)
+{
+	extern const char _bootopt;
+	unsigned int buf[14];
+
+	buf[0] = (unsigned int)addr;
+	buf[1] = img->len;
+	memcpy(&buf[2], img->hash, 32);
+	memcpy(&buf[10], img->iv, 16);
+
+	flash_program((void *)&_bootopt, buf, 14 * 4);
 }
 
 void main()
 {
-	extern char _app, _bootopt, _rom_start, _rom_size;
-	struct appimg_t *img;
+	extern const char _app, _bootopt, _rom_start, _rom_size;
+	const struct appimg_t *img;
+	const struct bootopt_t *bootopt = (struct bootopt_t *)&_bootopt;
 	unsigned int *app = (unsigned int *)&_app;
-	unsigned int *bootopt = (unsigned int *)&_bootopt;
-	unsigned int addr, len, start, end;
+	unsigned int rom_start, rom_end;
 
-	//uart_init();
-
-	start = (unsigned int)&_rom_start;
-	end = start + (unsigned int)&_rom_size;
-	addr = (unsigned int)bootopt[0];
-	len = (unsigned int)bootopt[1];
-
-addr = 0x08020000; // test
-(void)len;
-	if (addr == (unsigned int)app) {
-		// check len and hash
-		// if not match retrieve it
-	} else if (addr >= start && addr < end) {
-		img = (struct appimg_t *)addr;
-		// if p[0] >= ram_start && p[0] < ram_end then it's stack pointer
-		// run &_app after checking if current app is valid
-		if (img->magic[0] == MAGIC1 &&
-				img->magic[1] == MAGIC2 &&
-				img->magic[2] == MAGIC3) {
-			//verify_image();
-			//  - verify_hash();
-			program();
-			//update_bootopt();
-		}
-	} else {
-		// reload bootopt from the current app
-		// don't reboot here just run the app after reloading
-	}
-
-#if 0
-	flash_program((void * const)0x08018000, (const void * const)p, 1024);
-
-if (*(unsigned int *)0x08018000 == 0xffffffff)
-	reboot();
+	uart_init();
+#ifdef DEBUG
+	char t[10];
+	itoa((int)bootopt, t, 16);
+	uart_puts("BootOpt 0x");
+	uart_puts(t);
+	uart_puts("\r\n");
+	itoa(bootopt->addr, t, 16);
+	uart_puts("APP 0x");
+	uart_puts(t);
+	uart_puts("\r\n");
+	itoa(bootopt->len, t, 10);
+	uart_puts("Len ");
+	uart_puts(t);
+	uart_puts("\r\n");
 #endif
 
-	//setsp(app[0]);
+	rom_start = (unsigned int)&_rom_start;
+	rom_end = rom_start + (unsigned int)&_rom_size;
+
+	if (bootopt->addr == (unsigned int)app) {
+		// check len and hash
+		// if not match retrieve it
+		warn("bootopt does not match to the current app!");
+	} else if (bootopt->addr >= rom_start && bootopt->addr < rom_end) {
+		img = (struct appimg_t *)bootopt->addr;
+
+		if (img->magic[0] == MAGIC1 &&
+				img->magic[1] == MAGIC2 &&
+				img->magic[2] == MAGIC3) {// &&
+				//!memcmp(img->hash, bootopt->hash, 32)) {
+			if (verify_hash(img->hash, img->data, img->len) == 0) {
+				notice("Program new image");
+				program(app, img);
+				dsb();
+				isb();
+				//verify_hash()
+				update_bootopt(app, img);
+				reboot();
+			}
+		} else {
+			/* Here means new image may have been written but
+			 * bootopt's not updated properly due to power lost
+			 * during updating. So, run the current app after
+			 * checking if valid, and let user do update process
+			 * all over again. */
+			warn("Updating suspended");
+		}
+	} else {
+		/* reload bootopt from the current app
+		 * don't reboot here just run the app after reloading
+		 * otherwise infinite rebooting may occur when it reaches flash
+		 * write endurance */
+		warn("Invalid BootOpt. Trying to boot from old one");
+	}
+
+#ifdef DEBUG
+	uart_puts("Run ");
+	itoa((int)app, t, 16);
+	uart_puts(t);
+	uart_puts("\r\n\r\n");
+#endif
+
+	// check hash if modified
 	((void (*)())app[1])();
 }

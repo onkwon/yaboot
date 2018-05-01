@@ -4,7 +4,7 @@
 #if 0
 /* low-density */
 #define FLASH_ADDR_END				0x08007fff /* sector no. 32 */
-#elif 1
+#elif 0
 /* conn or mid-density */
 #define FLASH_ADDR_END				0x0801ffff /* sector no. 128 */
 #else
@@ -50,7 +50,7 @@ static inline unsigned int get_temporal_sector_addr(int size)
 	 *
 	 * Reserve a flash sector to save mapping */
 	//return 0x08007c00; /* low-density */
-	return 0x0801fc00; /* medium-density */
+	//return 0x0801fc00; /* medium-density */
 	return 0x0807f800; /* high-density */
 	return 0x0803f800; /* connectivity line devices */
 	(void)size;
@@ -67,7 +67,7 @@ static inline void flash_writesize_set(int bits)
 
 static inline int get_sector_size_kb(int sector)
 {
-	return 1; /* low or medium density */
+	//return 1; /* low or medium density */
 	return 2; /* high-density or connectivity line devices */
 	(void)sector;
 }

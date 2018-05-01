@@ -8,11 +8,10 @@
 	       .    |------------|  /
 	       m    |  BootOpt   | /
 	sector m+1  |------------|/
-	       .    |  OS(APP)   |
-	       .    |    --------|
-	       .    |   | OMAGIC |            --------
-	       .    |   | LEN    |  / 0x0000 | MAGIC1 | 0xDEADC0DE
-	       n    |   | HASH   | /         |--------|
+	       .    |            |
+	       .    |   OS(APP)  |            --------
+	       .    |            |  / 0x0000 | MAGIC1 | 0xDEADC0DE
+	       n    |            | /         |--------|
 	sector n+1  |------------|/   0x0004 | MAGIC2 | 0x45670123
 	       .    |            |           |--------|
 	       .    | New image  |    0x0008 | MAGIC3 | 0xCDEF89AB
@@ -26,20 +25,12 @@
 				      0x0040 | E(Data)|
 				              --------
 
-	         OMAGIC
-	        ---------
-	0x0000 | OMAGIC1 | 0xFFFFFFED
-	       |---------|
-	0x0004 | OMAGIC2 | 0xCBA98765
-	       |---------|
-	0x0008 | OMAGIC3 | 0x43210FFF
-	        ---------
-
 ## BootOpt (1 sector)
 
  0x0000 | ADDR
  0x0004 | LEN
  0x0008 | HASH (32 bytes)
+ 0x0028 | IV (16 bytes)
 
 * HASH is authenticated by RSA private key. So decrypt it first using the public key before comparing
 

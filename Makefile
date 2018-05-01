@@ -16,7 +16,7 @@ OD := $(CROSS_COMPILE)-objdump
 CFLAGS += -nostartfiles
 CFLAGS += -Wall -Wunused-parameter -Werror -Wno-main #-Wpointer-arith
 CFLAGS += -O2
-CFLAGS += -D$(MACH)
+CFLAGS += -D$(MACH) -DDEBUG
 
 TARGET	= yaboot
 SRCS    = $(wildcard *.c) tools/sha256.c tools/tiny-AES-c/aes.c

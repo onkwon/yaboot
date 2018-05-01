@@ -4,7 +4,8 @@ MEMORY
 	rom (rx)	: ORIGIN = 0x08000000, LENGTH = 512K
 }
 
-PROVIDE(_bootopt_offset = _app_offset - 2048); /* sector size = 2048 bytes */
-PROVIDE(_app_offset = 0x2000); /* 8192 */
+PROVIDE(_sector_size = 2048);
+PROVIDE(_bootopt_offset = _app_offset - _sector_size);
+PROVIDE(_app_offset = 0x4000); /* 16384 */
 
 INCLUDE common.ld
