@@ -8,8 +8,8 @@
 #include <stdlib.h>
 
 #define MAGIC1		0xDEC0ADDE
-#define MAGIC2		0x23016745
-#define MAGIC3		0xAB89EFCD
+#define MAGIC2		0xDEC1ADDE
+#define MAGIC3		0xDEC2ADDE
 
 #define warn(msg)	uart_puts("WARN: "msg"\r\n")
 #define notice(msg)	uart_puts(msg"\r\n")
@@ -95,9 +95,20 @@ static void program(void *addr, const struct appimg_t *img)
 		uart_put('%');
 #endif
 	}
+
+	/* Flash meta data, MAGIC, len, IV, Hash */
+	d = (uint8_t *)(((unsigned int)d + 3UL) & ~3UL); /* 4-byte alignement */
+#ifdef DEBUG
+	char t[10];
+	uart_puts("\r\n");
+	itoa((int)d, t, 16);
+	uart_puts("Meta 0x");
+	uart_puts(t);
+#endif
+	flash_program(d, (const void * const)img, (int)img->data - (int)img);
+
 #ifdef DEBUG
 	uart_puts("\r\n");
-	char t[10];
 	itoa((int)addr, t, 16);
 	uart_puts("written at 0x");
 	uart_puts(t);
@@ -157,12 +168,12 @@ void main()
 				img->magic[1] == MAGIC2 &&
 				img->magic[2] == MAGIC3) {// &&
 				//!memcmp(img->hash, bootopt->hash, 32)) {
+			// RSApub(Hash) first before verify_hash()
 			if (verify_hash(img->hash, img->data, img->len) == 0) {
 				notice("Program new image");
 				program(app, img);
 				dsb();
 				isb();
-				//verify_hash()
 				update_bootopt(app, img);
 				reboot();
 			}
@@ -180,6 +191,7 @@ void main()
 		 * otherwise infinite rebooting may occur when it reaches flash
 		 * write endurance */
 		warn("Invalid BootOpt. Trying to boot from old one");
+		//verify_hash(hash(enc(app)));
 	}
 
 #ifdef DEBUG
@@ -191,4 +203,5 @@ void main()
 
 	// check hash if modified
 	((void (*)())app[1])();
+	while (1);
 }

@@ -8,22 +8,25 @@
 	       .    |------------|  /
 	       m    |  BootOpt   | /
 	sector m+1  |------------|/
-	       .    |            |
-	       .    |   OS(APP)  |            --------
-	       .    |            |  / 0x0000 | MAGIC1 | 0xDEADC0DE
-	       n    |            | /         |--------|
-	sector n+1  |------------|/   0x0004 | MAGIC2 | 0x45670123
+	       .    |   OS(APP)  |
+	       .    |  ----------|
+	       .    |  | MAGIC1:3|
+	       .    |  | LEN     |            --------
+	       .    |  | IV      |  / 0x0000 | MAGIC1 | 0xDEADC0DE
+	       n    |  | Hash*   | /         |--------|
+	sector n+1  |------------|/   0x0004 | MAGIC2 | 0xDEADC1DE
 	       .    |            |           |--------|
-	       .    | New image  |    0x0008 | MAGIC3 | 0xCDEF89AB
+	       .    | New image  |    0x0008 | MAGIC3 | 0xDEADC2DE
 	       .    |            |           |--------|
 	            |------------|\   0x000C | Length | of E(Data)
 		                   \         |--------|
 				    \ 0x0010 |   IV   | AES Initial Vector
 				             |--------|
-				      0x0020 |  Hash  | RSApriv(HASH(E(Data)))
+				      0x0020 |  Hash* | RSApriv(HASH(E(Data)))
 				             |--------|
 				      0x0040 | E(Data)|
 				              --------
+	* Hash = RSApriv(HASH(E(Data)))
 
 ## BootOpt (1 sector)
 
