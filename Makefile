@@ -14,14 +14,21 @@ OC := $(CROSS_COMPILE)-objcopy
 OD := $(CROSS_COMPILE)-objdump
 
 CFLAGS += -nostartfiles
-CFLAGS += -Wall -Wunused-parameter -Werror -Wno-main #-Wpointer-arith
-CFLAGS += -O2
+CFLAGS += -Wall -Wunused-parameter -Werror -Wno-main -Wextra #-Wpointer-arith
+CFLAGS += -O2 #-std=c99
 CFLAGS += -D$(MACH) -DDEBUG
 
 TARGET	= yaboot
-SRCS    = $(wildcard *.c) tools/sha256.c tools/tiny-AES-c/aes.c
+SRCS    = $(wildcard *.c) \
+	  tools/tiny-AES-c/aes.c \
+	  tools/tinycrypt/lib/source/sha256.c \
+	  tools/tinycrypt/lib/source/ecc.c \
+	  tools/tinycrypt/lib/source/ecc_dsa.c \
+	  tools/tinycrypt/lib/source/utils.c
 OBJS	= $(SRCS:.c=.o)
-INCS	= -Ibsp -Itools -Itools/tiny-AES-c
+INCS	= -Ibsp -Itools \
+	  -Itools/tiny-AES-c \
+	  -Itools/tinycrypt/lib/include
 CFLAGS += -DCTR=1 #-DCBC=1
 
 LDFLAGS = -T$(LD_SCRIPT)

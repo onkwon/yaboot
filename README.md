@@ -30,15 +30,16 @@
 
 ## BootOpt (1 sector)
 
- 0x0000 | ADDR
- 0x0004 | LEN
- 0x0008 | HASH (32 bytes)
- 0x0028 | IV (16 bytes)
+	0x0000 | ADDR
+	0x0004 | LEN
+	0x0008 | HASH (64 bytes)
+	0x0028 | IV (16 bytes)
 
 * HASH is authenticated by RSA private key. So decrypt it first using the public key before comparing
 
 ## How it works
 
+```
 A1. If ADDR[0:2] matches to MAGIC1:3, go to B1
   A1-1. Before load ADDR[0:2] check flash boundary of ADDR
 A2. Else compare HASH to check if APP is modified (optional)
@@ -70,7 +71,15 @@ C11. Erase BootOpt
 C12. Upate ADDR, LEN, and HASH
   C12-1. Verify
 C13. Reboot
+```
 
 ## TODO
 
 * Add a functionality to update booloader itself
+* AES key exchange
+* Diffie hellman key exchange
+
+## NOTE
+
+* Don't forget to lock flash from reading, using SOC protection mechanism
+* Make sure the written new image at temporal flash slot is valid one before updating BootOpt. Otherwise you lose the control

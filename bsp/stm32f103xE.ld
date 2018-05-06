@@ -6,6 +6,6 @@ MEMORY
 
 PROVIDE(_sector_size = 2048);
 PROVIDE(_bootopt_offset = _app_offset - _sector_size);
-PROVIDE(_app_offset = 0x4000); /* 16384 */
+PROVIDE(_app_offset = 0x5000); /* 20480 */
 
 INCLUDE common.ld

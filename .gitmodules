@@ -1,3 +1,6 @@
 [submodule "tools/tiny-AES-c"]
 	path = tools/tiny-AES-c
 	url = https://github.com/kokke/tiny-AES-c.git
+[submodule "tools/tinycrypt"]
+	path = tools/tinycrypt
+	url = git@github.com:01org/tinycrypt.git

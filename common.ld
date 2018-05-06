@@ -53,13 +53,30 @@ SECTIONS
 		_ebss = .;
 	} > ram AT > rom
 
-	.aes128 _rom_start + _bootopt_offset - 16 :
+	.keys _rom_start + _bootopt_offset - 16 - 64 :
 	{
-		_aes_key = .;
+		_aeskey = .;
 		LONG(0x933ADA7F);
 		LONG(0x485F0153);
 		LONG(0x874F637C);
 		LONG(0x520202A2);
+		_pubkey = .;
+		LONG(0x6CC0085F);
+		LONG(0x6A1E9B21);
+		LONG(0xEEFCB6FB);
+		LONG(0x17B8ECEC);
+		LONG(0x3BBF86F1);
+		LONG(0x403DDBC9);
+		LONG(0xE501F3BE);
+		LONG(0x922F342D);
+		LONG(0x7D7A84F3);
+		LONG(0x707434ED);
+		LONG(0x4FB7D4D0);
+		LONG(0x7BB8F21F);
+		LONG(0xAA135FE1);
+		LONG(0xB9DED991);
+		LONG(0x165A04D0);
+		LONG(0xA740506E);
 	} > rom
 
 	.bootopt _rom_start + _bootopt_offset :
