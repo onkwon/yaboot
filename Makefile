@@ -16,18 +16,18 @@ OD := $(CROSS_COMPILE)-objdump
 CFLAGS += -nostartfiles
 CFLAGS += -Wall -Wunused-parameter -Werror -Wno-main -Wextra #-Wpointer-arith
 CFLAGS += -O2 #-std=c99
-CFLAGS += -D$(MACH) -DDEBUG
+CFLAGS += -D$(MACH) -DDEBUG #-DQUICKBOOT
 
 TARGET	= yaboot
 SRCS    = $(wildcard *.c) \
-	  tools/tiny-AES-c/aes.c \
+	  tools/tinycrypt/lib/source/aes_encrypt.c \
+	  tools/tinycrypt/lib/source/ctr_mode.c \
 	  tools/tinycrypt/lib/source/sha256.c \
 	  tools/tinycrypt/lib/source/ecc.c \
 	  tools/tinycrypt/lib/source/ecc_dsa.c \
 	  tools/tinycrypt/lib/source/utils.c
 OBJS	= $(SRCS:.c=.o)
 INCS	= -Ibsp -Itools \
-	  -Itools/tiny-AES-c \
 	  -Itools/tinycrypt/lib/include
 CFLAGS += -DCTR=1 #-DCBC=1
 

@@ -82,4 +82,4 @@ C13. Reboot
 ## NOTE
 
 * Don't forget to lock flash from reading, using SOC protection mechanism
-* Make sure the written new image at temporal flash slot is valid one before updating BootOpt. Otherwise you lose the control
+* Make sure the written new image at temporal flash slot is valid one before updating BootOpt. Otherwise you will get stuck booting

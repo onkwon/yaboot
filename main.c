@@ -1,8 +1,9 @@
 #include "bsp.h"
 #include "flash.h"
-#include "aes.h"
 #include "tinycrypt/sha256.h"
 #include "tinycrypt/ecc_dsa.h"
+#include "tinycrypt/ctr_mode.h"
+#include "tinycrypt/aes.h"
 #include "uart.h"
 
 #include <string.h>
@@ -42,7 +43,7 @@ struct bootopt_t {
 	const uint8_t iv[16];
 } __attribute__((packed, aligned(4)));
 
-extern char _pubkey, _aeskey, _sector_size, _bootopt, _app, _rom_start, _rom_size;
+extern char _sector_size;
 
 void reboot()
 {
@@ -55,9 +56,10 @@ void reboot()
 		| (1 << 2); /* system reset request */
 }
 
-static int verify(const uint8_t *signature, const uint8_t *data, uint32_t len)
+static int verify(const uint8_t *signature, const uint8_t *data, uint32_t len,
+		const void *eckey)
 {
-	const uint8_t *pubkey = (const uint8_t *)&_pubkey;
+	const uint8_t *pubkey = eckey;
 	struct tc_sha256_state_struct sha256_ctx;
 	uint8_t digest[TC_SHA256_DIGEST_SIZE];
 
@@ -87,28 +89,29 @@ static int verify(const uint8_t *signature, const uint8_t *data, uint32_t len)
 	return 0;
 }
 
-static int verify_enc(const uint8_t *signature, const uint8_t *data, uint32_t len)
+static int verify_enc(const uint8_t *signature, const uint8_t *data, uint32_t len,
+		const void *eckey, const void *aeskey,
+		const struct bootopt_t *bootopt)
 {
-	struct AES_ctx ctx;
-	uint8_t buf[(int)&_sector_size];
+	struct tc_aes_key_sched_struct ctx;
+	uint8_t buf[(int)&_sector_size], iv[16];
 	int size;
-	const uint8_t *pubkey = (const uint8_t *)&_pubkey;
-	const uint8_t *key = (const uint8_t *)&_aeskey;
-	const struct bootopt_t *bootopt = (struct bootopt_t *)&_bootopt;
+	const uint8_t *pubkey = eckey;
+	const uint8_t *key = aeskey;
 
 	struct tc_sha256_state_struct sha256_ctx;
 	uint8_t digest[TC_SHA256_DIGEST_SIZE];
 
-	notice("Verify");
+	notice("Verify(E)");
 
-	AES_init_ctx_iv(&ctx, key, bootopt->iv);
+	tc_aes128_set_encrypt_key(&ctx, key);
+	memcpy(iv, bootopt->iv, sizeof(bootopt->iv));
 	tc_sha256_init(&sha256_ctx);
 
 	for (uint32_t i = 0; i < len; i += (uint32_t)&_sector_size) {
 		size = ((len - i) < (uint32_t)&_sector_size)?
 			len - i : (uint32_t)&_sector_size;
-		memcpy(buf, &data[i], size);
-		AES_CTR_xcrypt_buffer(&ctx, buf, size);
+		tc_ctr_mode(buf, size, &data[i], size, iv, &ctx);
 
 		tc_sha256_update(&sha256_ctx, buf, size);
 	}
@@ -156,21 +159,21 @@ static int verify_hash(const uint8_t *hash, const uint8_t *data, size_t len)
 }
 #endif
 
-static void program(void *addr, const struct appimg_t *img)
+static void program(void *addr, const struct appimg_t *img, const void *aeskey)
 {
-	struct AES_ctx ctx;
-	uint8_t buf[(int)&_sector_size];
+	struct tc_aes_key_sched_struct ctx;
+	uint8_t buf[(int)&_sector_size], iv[16];
 	int size;
 	uint8_t *d = (uint8_t *)addr;
-	const uint8_t *key = (const uint8_t *)&_aeskey;
+	const uint8_t *key = (const uint8_t *)aeskey;
 
-	AES_init_ctx_iv(&ctx, key, img->iv);
+	tc_aes128_set_encrypt_key(&ctx, key);
+	memcpy(iv, img->iv, sizeof(img->iv));
 
 	for (uint32_t i = 0; i < img->len; i += (uint32_t)&_sector_size) {
 		size = ((img->len - i) < (uint32_t)&_sector_size)?
 			img->len - i : (uint32_t)&_sector_size;
-		memcpy(buf, &img->data[i], size);
-		AES_CTR_xcrypt_buffer(&ctx, buf, size);
+		tc_ctr_mode(buf, size, &img->data[i], size, iv, &ctx);
 		flash_program(d, (const void * const)buf, size);
 		d += size;
 #ifdef DEBUG
@@ -188,7 +191,7 @@ static void program(void *addr, const struct appimg_t *img)
 	flash_program(d, (const void * const)img, (int)img->data - (int)img);
 }
 
-static void update_bootopt(void *addr, const struct appimg_t *img)
+static void update_bootopt(void *dest, void *addr, const struct appimg_t *img)
 {
 	unsigned int buf[22];
 
@@ -197,7 +200,7 @@ static void update_bootopt(void *addr, const struct appimg_t *img)
 	memcpy(&buf[2], img->hash, 64);
 	memcpy(&buf[18], img->iv, 16);
 
-	flash_program((void *)&_bootopt, buf, 22 * 4);
+	flash_program(dest, buf, 22 * 4);
 }
 
 int __attribute__((weak)) default_CSPRNG(uint8_t *dest, unsigned int size)
@@ -209,6 +212,8 @@ int __attribute__((weak)) default_CSPRNG(uint8_t *dest, unsigned int size)
 
 void main()
 {
+	extern char _pubkey, _aeskey, _bootopt, _app, _rom_start, _rom_size;
+
 	const struct bootopt_t *bootopt = (struct bootopt_t *)&_bootopt;
 	unsigned int *app = (unsigned int *)&_app;
 	unsigned int rom_start, rom_end;
@@ -243,12 +248,12 @@ void main()
 				img->magic[1] == MAGIC2 &&
 				img->magic[2] == MAGIC3 &&
 				!memcmp(img->hash, bootopt->hash, 64) &&
-				!verify(img->hash, img->data, img->len)) {
+				!verify(img->hash, img->data, img->len, &_pubkey)) {
 			notice("Program new image");
-			program(app, img);
+			program(app, img, &_aeskey);
 			dsb();
 			isb();
-			update_bootopt(app, img);
+			update_bootopt(&_bootopt, app, img);
 			reboot();
 		} else {
 			/* Here means new image may have been written but
@@ -267,10 +272,13 @@ void main()
 		//verify_hash(hash(enc(app)));
 	}
 
-	if (verify_enc(bootopt->hash, (const uint8_t *)bootopt->addr, bootopt->len)) {
+#ifndef QUICKBOOT
+	if (verify_enc(bootopt->hash, (const uint8_t *)bootopt->addr,
+				bootopt->len, &_pubkey, &_aeskey, bootopt)) {
 		warn("bootopt does not match to the current app!");
 		while (1);
 	}
+#endif
 
 #ifdef DEBUG
 	uart_puts("Run     0x");
