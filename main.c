@@ -13,8 +13,9 @@
 #define MAGIC2		0xDEC1ADDE
 #define MAGIC3		0xDEC2ADDE
 
-#define warn(msg)	uart_puts("WARN: "msg"\r\n")
-#define notice(msg)	uart_puts(msg"\r\n")
+#define error(msg)	uart_puts("ERROR : "msg"\r\n")
+#define warn(msg)	uart_puts("WARN  : "msg"\r\n")
+#define notice(msg)	uart_puts("NOTICE: "msg"\r\n")
 
 struct appimg_t {
 	const uint32_t magic[3];
@@ -80,9 +81,9 @@ static int verify(const uint8_t *signature, const uint8_t *data, uint32_t len,
 #endif
 
 	if (uECC_valid_public_key(pubkey, uECC_secp256r1()) != 0)
-		warn("Public key is not valid");
+		error("Public key is not valid");
 	if (!uECC_verify(pubkey, digest, sizeof(digest), signature, uECC_secp256r1())) {
-		warn("Verify failed");
+		error("Verify failed");
 		return -1;
 	}
 
@@ -90,8 +91,7 @@ static int verify(const uint8_t *signature, const uint8_t *data, uint32_t len,
 }
 
 static int verify_enc(const uint8_t *signature, const uint8_t *data, uint32_t len,
-		const void *eckey, const void *aeskey,
-		const struct bootopt_t *bootopt)
+		const void *eckey, const void *aeskey, const void *aesiv)
 {
 	struct tc_aes_key_sched_struct ctx;
 	uint8_t buf[(int)&_sector_size], iv[16];
@@ -105,7 +105,7 @@ static int verify_enc(const uint8_t *signature, const uint8_t *data, uint32_t le
 	notice("Verify(E)");
 
 	tc_aes128_set_encrypt_key(&ctx, key);
-	memcpy(iv, bootopt->iv, sizeof(bootopt->iv));
+	memcpy(iv, aesiv, sizeof(iv));
 	tc_sha256_init(&sha256_ctx);
 
 	for (uint32_t i = 0; i < len; i += (uint32_t)&_sector_size) {
@@ -119,9 +119,9 @@ static int verify_enc(const uint8_t *signature, const uint8_t *data, uint32_t le
 	tc_sha256_final(digest, &sha256_ctx);
 
 	if (uECC_valid_public_key(pubkey, uECC_secp256r1()) != 0)
-		warn("Public key is not valid");
+		error("Public key is not valid");
 	if (!uECC_verify(pubkey, digest, sizeof(digest), signature, uECC_secp256r1())) {
-		warn("Verify failed");
+		error("Verify failed");
 		return -1;
 	}
 
@@ -203,11 +203,30 @@ static void update_bootopt(void *dest, void *addr, const struct appimg_t *img)
 	flash_program(dest, buf, 22 * 4);
 }
 
+static inline struct appimg_t *get_app_header(const struct bootopt_t *bootopt,
+		unsigned int rom_end)
+{
+	unsigned int *p = (unsigned int *)bootopt->addr;
+
+	for (; (unsigned int)p < rom_end; p++) {
+		if (p[0] == MAGIC1 && p[1] == MAGIC2 && p[2] == MAGIC3)
+			return (struct appimg_t *)p;
+	}
+
+	return NULL;
+}
+
 int __attribute__((weak)) default_CSPRNG(uint8_t *dest, unsigned int size)
 {
 	return 0;
 	(void)dest;
 	(void)size;
+}
+
+static inline void freeze()
+{
+	error("Freeze");
+	while (1);
 }
 
 void main()
@@ -216,6 +235,7 @@ void main()
 
 	const struct bootopt_t *bootopt = (struct bootopt_t *)&_bootopt;
 	unsigned int *app = (unsigned int *)&_app;
+	const struct appimg_t *img = NULL;
 	unsigned int rom_start, rom_end;
 
 	uart_init();
@@ -238,17 +258,17 @@ void main()
 	rom_start = (unsigned int)&_rom_start;
 	rom_end = rom_start + (unsigned int)&_rom_size;
 
-	if (bootopt->addr == (unsigned int)app) {
-		// check len and hash
-		// if not match retrieve it
-	} else if (bootopt->addr >= rom_start && bootopt->addr < rom_end) {
-		const struct appimg_t *img = (struct appimg_t *)bootopt->addr;
+	if (bootopt->addr != (unsigned int)app &&
+			bootopt->addr >= rom_start && bootopt->addr < rom_end) {
+		img = (struct appimg_t *)bootopt->addr;
 
 		if (img->magic[0] == MAGIC1 &&
 				img->magic[1] == MAGIC2 &&
 				img->magic[2] == MAGIC3 &&
 				!memcmp(img->hash, bootopt->hash, 64) &&
-				!verify(img->hash, img->data, img->len, &_pubkey)) {
+				!verify(img->hash, img->data, img->len, &_pubkey) &&
+				/* FIXME: Include meta and align by sector size */
+				(unsigned int)app + img->len < (unsigned int)img) {
 			notice("Program new image");
 			program(app, img, &_aeskey);
 			dsb();
@@ -263,20 +283,32 @@ void main()
 			 * all over again. */
 			warn("Updating suspended");
 		}
-	} else {
-		/* reload bootopt from the current app
-		 * don't reboot here just run the app after reloading
-		 * otherwise infinite rebooting may occur when it reaches flash
-		 * write endurance */
-		warn("Invalid BootOpt. Trying to boot from old one");
-		//verify_hash(hash(enc(app)));
 	}
 
+	if ((img = get_app_header(bootopt, rom_end)) == NULL)
+		freeze();
+
+	if (img->len == bootopt->len &&
+			!memcmp(bootopt->hash, img->hash, 64) &&
+			!memcmp(bootopt->iv, img->iv, 16))
+		goto out;
+
+	warn("bootopt does not match to the current app!");
+	if (verify_enc(img->hash, (const uint8_t *)app, img->len,
+				&_pubkey, &_aeskey, img->iv))
+		freeze();
+	update_bootopt(&_bootopt, app, img);
+	/* NOTE: Do not reboot here but just run the app after updating
+	 * bootopt. Otherwise infinite rebooting may occur when it
+	 * reaches flash write endurance */
+	//reboot();
+
+out:
 #ifndef QUICKBOOT
 	if (verify_enc(bootopt->hash, (const uint8_t *)bootopt->addr,
-				bootopt->len, &_pubkey, &_aeskey, bootopt)) {
-		warn("bootopt does not match to the current app!");
-		while (1);
+				bootopt->len, &_pubkey, &_aeskey, bootopt->iv)) {
+		warn("program may be modified");
+		freeze();
 	}
 #endif
 

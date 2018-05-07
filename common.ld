@@ -8,6 +8,8 @@ PROVIDE(_ram_size    = LENGTH(ram));
 PROVIDE(_ram_end     = ORIGIN(ram) + LENGTH(ram));
 PROVIDE(_vector_size = 0x200); /* The minimum alignment is 128 words. */
 
+PROVIDE(_bootopt_offset = _app_offset - _sector_size);
+PROVIDE(_app_offset = 0x5000); /* 20480 */
 PROVIDE(_bootopt = _rom_start + _bootopt_offset);
 PROVIDE(_app = _rom_start + _app_offset);
 
