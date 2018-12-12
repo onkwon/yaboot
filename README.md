@@ -1,5 +1,7 @@
 ## Memory map
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/0e3a0af965e04767ab8cacd08d2e3569)](https://app.codacy.com/app/onkwon/yaboot?utm_source=github.com&utm_medium=referral&utm_content=onkwon/yaboot&utm_campaign=Badge_Grade_Dashboard)
+
 	            /============\
 	sector 0    | Bootloader |
 	       .    |    --------|
