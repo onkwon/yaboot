@@ -9,44 +9,47 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define MAGIC1		0xDEC0ADDE
-#define MAGIC2		0xDEC1ADDE
-#define MAGIC3		0xDEC2ADDE
+#define MAGIC1				0xDEC0ADDE
+#define MAGIC2				0xDEC1ADDE
+#define MAGIC3				0xDEC2ADDE
 
-#define error(msg)	uart_puts("ERROR : "msg"\r\n")
-#define warn(msg)	uart_puts("WARN  : "msg"\r\n")
-#define notice(msg)	uart_puts("NOTICE: "msg"\r\n")
+#define HASH_SIZE			64
+#define INITIAL_VECTOR_SIZE		16
+
+#define error(msg)			uart_puts("ERROR : "msg"\r\n")
+#define warn(msg)			uart_puts("WARN  : "msg"\r\n")
+#define notice(msg)			uart_puts("NOTICE: "msg"\r\n")
 
 struct appimg_t {
 	const uint32_t magic[3];
-	const uint32_t len;
-	const uint8_t iv[16];
+	const size_t len;
+	const uint8_t iv[INITIAL_VECTOR_SIZE];
 	union {
 		struct {
 			const uint8_t r[32];
 			const uint8_t s[32];
 		} ecdsa;
-		const uint8_t hash[64];
+		const uint8_t hash[HASH_SIZE];
 	};
 	const uint8_t data[];
 } __attribute__((packed, aligned(4)));
 
 struct bootopt_t {
-	const uint32_t addr;
-	const uint32_t len;
+	const uintptr_t addr;
+	const size_t len;
 	union {
 		struct {
 			const uint8_t r[32];
 			const uint8_t s[32];
 		} ecdsa;
-		const uint8_t hash[64];
+		const uint8_t hash[HASH_SIZE];
 	};
-	const uint8_t iv[16];
+	const uint8_t iv[INITIAL_VECTOR_SIZE];
 } __attribute__((packed, aligned(4)));
 
 extern char _sector_size;
 
-void reboot()
+static void reboot(void)
 {
 	dsb();
 	isb();
@@ -94,7 +97,7 @@ static int verify_enc(const uint8_t *signature, const uint8_t *data, uint32_t le
 		const void *eckey, const void *aeskey, const void *aesiv)
 {
 	struct tc_aes_key_sched_struct ctx;
-	uint8_t buf[(int)&_sector_size], iv[16];
+	uint8_t buf[(int)&_sector_size], iv[INITIAL_VECTOR_SIZE];
 	int size;
 	const uint8_t *pubkey = eckey;
 	const uint8_t *key = aeskey;
@@ -162,7 +165,7 @@ static int verify_hash(const uint8_t *hash, const uint8_t *data, size_t len)
 static void program(void *addr, const struct appimg_t *img, const void *aeskey)
 {
 	struct tc_aes_key_sched_struct ctx;
-	uint8_t buf[(int)&_sector_size], iv[16];
+	uint8_t buf[(int)&_sector_size], iv[INITIAL_VECTOR_SIZE];
 	int size;
 	uint8_t *d = (uint8_t *)addr;
 	const uint8_t *key = (const uint8_t *)aeskey;
@@ -197,8 +200,8 @@ static void update_bootopt(void *dest, void *addr, const struct appimg_t *img)
 
 	buf[0] = (unsigned int)addr;
 	buf[1] = img->len;
-	memcpy(&buf[2], img->hash, 64);
-	memcpy(&buf[18], img->iv, 16);
+	memcpy(&buf[2], img->hash, HASH_SIZE);
+	memcpy(&buf[18], img->iv, INITIAL_VECTOR_SIZE);
 
 	flash_program(dest, buf, 22 * 4);
 }
@@ -216,27 +219,26 @@ static inline struct appimg_t *get_app_header(const struct bootopt_t *bootopt,
 	return NULL;
 }
 
-int __attribute__((weak)) default_CSPRNG(uint8_t *dest, unsigned int size)
-{
-	return 0;
-	(void)dest;
-	(void)size;
-}
-
-static inline void freeze()
+static inline void freeze(void)
 {
 	error("Freeze");
 	while (1);
 }
 
-void main()
+void main(void)
 {
-	extern char _pubkey, _aeskey, _bootopt, _app, _rom_start, _rom_size;
+	extern char _pubkey, _aeskey, _rom_start, _rom_size;
+	extern struct bootopt_t _bootopt;
+	extern uintptr_t _app;
 
-	const struct bootopt_t *bootopt = (struct bootopt_t *)&_bootopt;
-	unsigned int *app = (unsigned int *)&_app;
-	const struct appimg_t *img = NULL;
-	unsigned int rom_start, rom_end;
+	const struct bootopt_t *bootopt;
+	const struct appimg_t *img;
+	uintptr_t *app;
+	uintptr_t rom_start, rom_end;
+
+	bootopt = (struct bootopt_t *)&_bootopt;
+	app = (uintptr_t *)&_app;
+	img = NULL;
 
 	uart_init();
 #ifdef DEBUG
@@ -258,14 +260,14 @@ void main()
 	rom_start = (unsigned int)&_rom_start;
 	rom_end = rom_start + (unsigned int)&_rom_size;
 
-	if (bootopt->addr != (unsigned int)app &&
+	if (bootopt->addr != (uintptr_t)app &&
 			bootopt->addr >= rom_start && bootopt->addr < rom_end) {
 		img = (struct appimg_t *)bootopt->addr;
 
 		if (img->magic[0] == MAGIC1 &&
 				img->magic[1] == MAGIC2 &&
 				img->magic[2] == MAGIC3 &&
-				!memcmp(img->hash, bootopt->hash, 64) &&
+				!memcmp(img->hash, bootopt->hash, HASH_SIZE) &&
 				!verify(img->hash, img->data, img->len, &_pubkey) &&
 				/* FIXME: Include meta and align by sector size */
 				(unsigned int)app + img->len < (unsigned int)img) {
@@ -289,8 +291,8 @@ void main()
 		freeze();
 
 	if (img->len == bootopt->len &&
-			!memcmp(bootopt->hash, img->hash, 64) &&
-			!memcmp(bootopt->iv, img->iv, 16))
+			!memcmp(bootopt->hash, img->hash, HASH_SIZE) &&
+			!memcmp(bootopt->iv, img->iv, INITIAL_VECTOR_SIZE))
 		goto out;
 
 	warn("bootopt does not match to the current app!");

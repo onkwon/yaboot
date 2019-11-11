@@ -216,6 +216,7 @@ flash_write_core(void * const addr, const void * const buf, size_t len,
 	ss = diff = 0;
 	new = NULL;
 	new_start = new_end = 0;
+	restore = NULL;
 
 	flash_prepare();
 retry:

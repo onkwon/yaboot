@@ -13,9 +13,16 @@ LD := $(CROSS_COMPILE)-ld
 OC := $(CROSS_COMPILE)-objcopy
 OD := $(CROSS_COMPILE)-objdump
 
-CFLAGS += -nostartfiles
-CFLAGS += -Wall -Wunused-parameter -Werror -Wno-main -Wextra #-Wpointer-arith
-CFLAGS += -O2 #-std=c99
+CFLAGS += -std=gnu99 -Os \
+	  -ffunction-sections -fdata-sections -Wl,--gc-sections \
+	  -nostartfiles
+CFLAGS += -W -Wall -Wunused-parameter -Wno-main -Wextra -Wformat-nonliteral \
+	  -Wpointer-arith -Wbad-function-cast \
+	  -Wshadow -Wwrite-strings -Wstrict-aliasing \
+	  -Wmissing-format-attribute -Wmissing-include-dirs \
+	  -Waggregate-return -Winit-self -Wlogical-op -Wredundant-decls \
+	  -Wdouble-promotion -Wfloat-equal -Wformat-overflow
+CFLAGS += -Werror -Wno-error=aggregate-return -Wno-error=pedantic
 CFLAGS += -D$(MACH) -DDEBUG #-DQUICKBOOT
 
 TARGET	= yaboot
